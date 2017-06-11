@@ -3,6 +3,7 @@
 namespace App;
 
 use Cache;
+use Exception;
 use GuzzleHttp\Client;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Psr7\Response;
@@ -178,10 +179,13 @@ class Service extends Fluent
 
     public function verifySignature(Request $request)
     {
+        $data = $request->getContent();
+        $key = config('prabbit.github.secret');
+
         $signature = 'sha1=' . hash_hmac(
             'sha1',
-            config('prabbit.github.secret_token'),
-            $request->getContent()
+            $data,
+            $key
         );
 
         if (
@@ -190,7 +194,7 @@ class Service extends Fluent
                 $request->header('X-Hub-Signature')
             )
         ) {
-            throw new Exception('Signature mismatch');
+            abort(400);
         }
     }
 }

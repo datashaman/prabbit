@@ -22,6 +22,6 @@ return [
 
     'github' => [
         'repo' => 'oneafricamedia/horizon',
-        'secret_token' => env('GITHUB_SECRET_TOKEN'),
+        'secret' => env('GITHUB_SECRET'),
     ],
 ];

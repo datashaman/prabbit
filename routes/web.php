@@ -7,7 +7,29 @@ Route::get('/', function () {
     return view('welcome', $data);
 });
 
-Route::get('/webhook', function (Request $request) {
+Route::post('/webhook', function (Request $request) {
     app(App\Service::class)->verifySignature($request);
-    return 'OK';
+
+    $event = $request->header('X-GitHub-Event');
+
+    switch ($event) {
+        case 'ping':
+            return response()
+                ->json(
+                    [
+                        'status' => 'success',
+                        'message' => 'pong',
+                    ]
+                );
+        default:
+            return response()
+                ->json(
+                    [
+                        'status' => 'error',
+                        'message' => 'Unhandled event',
+                        'data' => compact('event')
+                    ],
+                    400
+                );
+    }
 });
