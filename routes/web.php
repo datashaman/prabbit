@@ -8,8 +8,6 @@ Route::get('/', function () {
 });
 
 Route::post('/webhook', function (Request $request) {
-    app(App\Service::class)->verifySignature($request);
-
     $event = $request->header('X-GitHub-Event');
 
     switch ($event) {
@@ -32,4 +30,4 @@ Route::post('/webhook', function (Request $request) {
                     400
                 );
     }
-});
+})->middleware('verifySignature');

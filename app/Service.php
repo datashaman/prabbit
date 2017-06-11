@@ -176,25 +176,4 @@ class Service extends Fluent
             ->map([$this, 'mapPullRequest']);
         return compact('pullRequests');
     }
-
-    public function verifySignature(Request $request)
-    {
-        $data = $request->getContent();
-        $key = config('prabbit.github.secret');
-
-        $signature = 'sha1=' . hash_hmac(
-            'sha1',
-            $data,
-            $key
-        );
-
-        if (
-            !hash_equals(
-                $signature,
-                $request->header('X-Hub-Signature')
-            )
-        ) {
-            abort(400);
-        }
-    }
 }
