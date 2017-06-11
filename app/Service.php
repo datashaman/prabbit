@@ -13,6 +13,7 @@ use Kevinrob\GuzzleCache\Storage\LaravelCacheStorage;
 use Kevinrob\GuzzleCache\Strategy\PrivateCacheStrategy;
 use League\Flysystem\Adapter\Local;
 use Log;
+use Illuminate\Http\Request;
 
 class Service extends Fluent
 {
