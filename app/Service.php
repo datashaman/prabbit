@@ -158,6 +158,7 @@ class Service extends Fluent
                 'body',
                 'created_at',
                 'html_url',
+                'merged',
                 'number',
                 'title',
                 'updated_at',

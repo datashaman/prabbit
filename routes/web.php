@@ -1,5 +1,7 @@
 <?php
 
+use App\Events\PullRequestEvent;
+use App\Events\StatusEvent;
 use Illuminate\Http\Request;
 
 Route::get('/', function () {
@@ -8,6 +10,8 @@ Route::get('/', function () {
 });
 
 Route::post('/webhook', function (Request $request) {
+    $service = app(App\Service::class);
+
     $payload = $request->json();
 
     Log::debug('webhook', ['payload' => $payload->all()]);
@@ -26,8 +30,44 @@ Route::post('/webhook', function (Request $request) {
                 );
         case 'pull_request':
             switch ($action) {
+                case 'closed':
+                    event(
+                        new PullRequestEvent(
+                            array_only(
+                                $payload->all(),
+                                [
+                                    'action',
+                                    'number',
+                                    'pull_request.merged',
+                                ]
+                            )
+                        )
+                    );
+                    break;
                 case 'labeled':
+                case 'unlabeled':
+                    event(
+                        new PullRequestEvent(
+                            array_only(
+                                $payload->all(),
+                                [
+                                    'action',
+                                    'number',
+                                    'label',
+                                ]
+                            )
+                        )
+                    );
+                    break;
                 case 'opened':
+                case 'reopened':
+                    event(
+                        new PullRequestEvent(
+                            $service->mapPullRequest(
+                                $payload->get('pull_request')
+                            )
+                        )
+                    );
                 default:
                     return response()
                         ->json(
@@ -39,6 +79,22 @@ Route::post('/webhook', function (Request $request) {
                             400
                         );
             }
+            break;
+        case 'status':
+            event(
+                new StatusEvent(
+                    array_only(
+                        $payload->all(),
+                        [
+                            'target_url',
+                            'context',
+                            'description',
+                            'state',
+                        ]
+                    )
+                )
+            );
+            break;
         default:
             return response()
                 ->json(
