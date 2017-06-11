@@ -20,5 +20,8 @@ return [
         ],
     ],
 
-    'repo' => 'oneafricamedia/horizon',
+    'github' => [
+        'repo' => 'oneafricamedia/horizon',
+        'secret_token' => env('GITHUB_SECRET_TOKEN'),
+    ],
 ];
