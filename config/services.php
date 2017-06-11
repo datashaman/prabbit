@@ -14,6 +14,23 @@ return [
     |
     */
 
+    'github' => [
+        'base_uri' => 'https://api.github.com/',
+        'auth' => [
+            env('GITHUB_USERNAME'),
+            env('GITHUB_API_TOKEN'),
+        ],
+    ],
+
+    'jenkins' => [
+        # Must end with /
+        'base_uri' => env('JENKINS_BASE_URI'),
+        'auth' => [
+            env('JENKINS_USERNAME'),
+            env('JENKINS_API_TOKEN'),
+        ],
+    ],
+
     'mailgun' => [
         'domain' => env('MAILGUN_DOMAIN'),
         'secret' => env('MAILGUN_SECRET'),

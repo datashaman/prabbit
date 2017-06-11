@@ -1,9 +1,13 @@
 <?php
 
-use GrahamCampbell\GitHub\Facades\GitHub;
-use GuzzleHttp\Client as GuzzleClient;
+use GuzzleHttp\Client;
+use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Collection;
+use Kevinrob\GuzzleCache\CacheMiddleware;
+use Kevinrob\GuzzleCache\Storage\LaravelCacheStorage;
+use Kevinrob\GuzzleCache\Strategy\PrivateCacheStrategy;
+use League\Flysystem\Adapter\Local;
 
 /*
 |--------------------------------------------------------------------------
@@ -16,35 +20,45 @@ use Illuminate\Support\Collection;
 |
 */
 
-class Client extends GuzzleClient {
-    public function __construct(string $base_uri, string $username, string $token) {
-        $auth = [$username, $token];
-        parent::__construct(compact('base_uri', 'auth'));
-    }  
-}
-
-function repo() {
-    return 'OneAfricaMedia/horizon';
-}
-
-function client(string $base_uri, string $username, string $token) {
+function service(
+    string $name,
+    array $options = []
+): Client {
+    static $stack;
     static $adapters = [];
 
-    if (!array_has($adapters, $base_uri)) {
-        $adapters[$base_uri] = new Client($base_uri,  $username,  $token);
+    if (!isset($stack)) {
+        $stack = HandlerStack::create();
+        $stack->push(
+            new CacheMiddleware(
+                new PrivateCacheStrategy(
+                    new LaravelCacheStorage(
+                        Cache::store('file')
+                    )
+                )
+            ),
+            'cache'
+        );
     }
 
-    return $adapters[$base_uri];
+    if (!array_has($adapters, $name)) {
+        $options = array_merge(
+            config("services.$name"),
+            $options,
+            ['handler' => $stack]
+        );
+        $adapters[$name] = new Client($options);
+    }
+
+    return $adapters[$name];
 }
 
-function github()
+function repo(): Client
 {
-    return client('https://api.github.com', env('GITHUB_USERNAME'), env('GITHUB_TOKEN'));
-}
-
-function jenkins()
-{
-    return client('https://jenkins.oam.cool', env('JENKINS_USERNAME'), env('JENKINS_TOKEN'));
+    $repo = config('prabbit.repo');
+    return service('github', [
+        'base_uri' => config('services.github.base_uri') . "repos/$repo/",
+    ]);
 }
 
 function json(Response $response): Collection
@@ -52,16 +66,38 @@ function json(Response $response): Collection
     return collect(json_decode($response->getBody(), true));
 }
 
+function markdown(string $text): string
+{
+    $repo = config('prabbit.repo');
+    $key = sha1("$repo-$text");
+
+    $html = Cache::rememberForever(
+        $key,
+        function () use ($repo, $text): string {
+            return (string) service('github')
+                ->post('markdown', [
+                    'json' => [
+                        'text' => $text,
+                        'mode' => 'gfm',
+                        'context' => $repo,
+                    ],
+                ])
+                ->getBody();
+        }
+    );
+
+    return $html;
+}
+
 function openPullRequests(
     string $userLogin = null
 ): Collection {
-    $repo = repo();
     $options = [
         'query' => [
             'status' => 'open',
         ],
     ];
-    $pullRequests = json(github()->get("/repos/$repo/pulls", $options));
+    $pullRequests = json(repo()->get('pulls', $options));
 
     if (!empty($userLogin)) {
         return $pullRequests->where('user.login', $userLogin);
@@ -72,29 +108,41 @@ function openPullRequests(
 
 function buildJob()
 {
-    return json(jenkins()->get('/job/Horizon/view/PR/job/PR-HorizonWebApp-QA'));
+    return json(service('jenkins')->get('job/Horizon/view/PR/job/PR-HorizonWebApp-QA'));
 }
 
-Route::get('/', function () {
-    $pullRequests = openPullRequests()
-        ->map(function ($pr) {
-            $statuses = json(github()->get(array_get($pr, '_links.statuses.href')));
+function status($ref)
+{
+    $icons = config('prabbit.icons');
+    $status = json(repo()->get("commits/$ref/status"));
 
-            $build = array_only(
-                $statuses->where('context', 'jenkins/hz/wapp/build')->first(),
-                [
-                    'state',
-                    'description',
-                    'target_url',
-                    'created_at',
-                ]
-            );
+    $status['icon'] = $icons['states'][$status['state']];
+    $status['statuses'] = collect($status['statuses'])
+        ->map(function ($s) use ($icons) {
+            $s['icon'] = $icons['statuses'][$s['context']];
+            return $s;
+        })
+        ->all();
+
+    return $status;
+}
+
+function generateData()
+{
+    $pullRequests = openPullRequests()
+        ->map(function (array $pr): array {
+            Log::debug('pull request', compact('pr'));
+
+            $labels = json(repo()->get(array_get($pr, '_links.issue.href')))->get('labels');
+
+            $status = status(array_get($pr, 'head.sha'));
 
             $user = array_only(
                 $pr['user'],
                 [
-                    'login',
+                    'avatar_url',
                     'html_url',
+                    'login',
                     'url',
                 ]
             );
@@ -102,16 +150,24 @@ Route::get('/', function () {
             return array_only(
                 $pr,
                 [
-                    'id',
-                    'html_url',
-                    'url',
-                    'title',
                     'body',
                     'created_at',
+                    'html_url',
+                    'number',
+                    'title',
                     'updated_at',
+                    'url',
                 ]
-            ) + compact('build', 'user');
+            ) + compact(
+                'labels',
+                'status',
+                'user'
+            );
         });
 
-    return view('welcome', compact('pullRequests'));
+    return compact('pullRequests');
+}
+
+Route::get('/', function () {
+    return view('welcome', generateData());
 });
