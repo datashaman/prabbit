@@ -174,4 +174,22 @@ class Service extends Fluent
             ->map([$this, 'mapPullRequest']);
         return compact('pullRequests');
     }
+
+    public function verifySignature(Request $request)
+    {
+        $signature = 'sha1=' . hash_hmac(
+            'sha1',
+            config('prabbit.github.secret_token'),
+            (string) $request->getBody()
+        );
+
+        if (
+            !hash_equals(
+                $signature,
+                $request->header('X-Hub-Signature')
+            )
+        ) {
+            throw new Exception('Signature mismatch');
+        }
+    }
 }
