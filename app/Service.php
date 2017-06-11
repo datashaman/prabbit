@@ -181,7 +181,7 @@ class Service extends Fluent
         $signature = 'sha1=' . hash_hmac(
             'sha1',
             config('prabbit.github.secret_token'),
-            (string) $request->getBody()
+            $request->getContent()
         );
 
         if (
